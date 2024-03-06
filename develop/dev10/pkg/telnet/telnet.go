@@ -2,15 +2,14 @@ package telnet
 
 import (
 	"fmt"
-	"io"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
 
+	t "github.com/matjam/telnet"
 	flag "github.com/spf13/pflag"
 )
 
@@ -35,13 +34,10 @@ func Connect() {
 		}
 	}
 
-	err := connect(sec, host, port)
-	if err != nil {
-		log.Fatal(err)
-	}
+	connect(sec, host, port)
 }
 
-func connect(sec time.Duration, host, port string) error {
+func connect(sec time.Duration, host, port string) {
 	addr := host
 	if host != "" {
 		addr += fmt.Sprintf(":%s", port)
@@ -52,40 +48,29 @@ func connect(sec time.Duration, host, port string) error {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGQUIT)
 
 	for {
-		conn, err := net.Dial("tcp", addr)
-		if err != nil {
-			fmt.Println("can't connect")
-			fmt.Println(err)
-			return nil
-		}
-
 		select {
 		case <-sigs:
-			return nil
+			return
 		default:
-			handleClient(conn, sec)
 		}
-	}
-}
-
-func handleClient(conn net.Conn, sec time.Duration) {
-	defer conn.Close()
-
-	conn.SetDeadline(time.Now().Add(time.Second * time.Duration(sec)))
-
-	buf := make([]byte, 0, 4096)
-	tmp := make([]byte, 256)
-	for {
-		n, err := conn.Read(tmp)
+		conn, err := t.Dial(addr)
 		if err != nil {
-			if err != io.EOF {
-				fmt.Println("read error:", err)
-			}
-			break
+			log.Fatal(err)
 		}
-		buf = append(buf, tmp[:n]...)
+		conn.SetDeadline(time.Now().Add(sec))
 
+		var res string
+		fmt.Scanln(&res)
+
+		if len(res) > 0 {
+			conn.Write([]byte(res))
+		}
+
+		var buf []byte
+		conn.Read(buf)
+		if len(buf) > 0 {
+			fmt.Println(string(buf))
+		}
+		conn.Close()
 	}
-
-	fmt.Println(string(buf))
 }
